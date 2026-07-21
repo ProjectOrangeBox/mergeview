@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace peels\mergeView;
+namespace orange\mergeview;
 
-use peels\mergeView\exceptions\Merge as MergeException;
+use orange\mergeview\exceptions\Merge as MergeException;
 
 /**
  * Based On the original PyroCMS LEX Parser

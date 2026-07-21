@@ -23,7 +23,7 @@
     },
     "autoload": {
         "psr-4": {
-            "peels\\mergeView\\": "src/"
+            "orange\\mergeview\\": "src/"
         }
     },
     "minimum-stability": "dev",

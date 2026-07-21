@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace peels\mergeView\exceptions;
+namespace orange\mergeview\exceptions;
 
 use Exception;
 

@@ -5,7 +5,7 @@ A simple "mail merge" style template parser, based on the original PyroCMS LEX p
 ## Example
 
 ```php
-use peels\mergeView\Merge;
+use orange\mergeview\Merge;
 
 $merge = new Merge(['allow php' => false]);
 

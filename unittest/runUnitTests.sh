@@ -7,4 +7,4 @@ else
 fi
 # --process-isolation
 
-../../vendor/bin/phpunit --process-isolation --colors --testdox --bootstrap bootstrap.php --testdox-html results.html ./tests$APPEND
+../../../bin/phpunit --process-isolation --colors --testdox --bootstrap bootstrap.php --testdox-html results.html ./tests$APPEND

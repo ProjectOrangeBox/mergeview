@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use orange\framework\Data;
-use peels\mergeview\Merge;
+use orange\mergeview\Merge;
 
 final class MailMergeTest extends unitTestHelper
 {

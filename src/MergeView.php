@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace peels\mergeView;
+namespace orange\mergeview;
 
 use orange\framework\abstract\ViewAbstract;
 use orange\framework\interfaces\DataInterface;
