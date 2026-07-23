@@ -90,7 +90,7 @@ class Merge
 
         if (!function_exists($functionName)) {
             foreach ($this->pluginSearchPaths as $path) {
-                if ($pluginPath = realpath(rtrim($path, '/') . '/' . $functionName . '.php')) {
+                if ($pluginPath = realpath(rtrim((string) $path, '/') . '/' . $functionName . '.php')) {
                     require_once $pluginPath;
                     break;
                 }
@@ -202,7 +202,7 @@ class Merge
                             $looped_text .= $str;
                         }
                     }
-                    $text = preg_replace('/' . preg_quote($match[0][0], '/') . '/m', addcslashes($looped_text, '\\$'), $text, 1);
+                    $text = preg_replace('/' . preg_quote($match[0][0], '/') . '/m', addcslashes($looped_text, '\\$'), (string) $text, 1);
                 } else { // It's a callback block.
                     // Let's extract it so it doesn't conflict
                     // with the local scope variables in the next step.
@@ -215,7 +215,7 @@ class Merge
          * $data_matches[0] is the raw data tag
          * $data_matches[1] is the data variable (dot notated)
          */
-        if (preg_match_all($this->variableTagRegex, $text, $data_matches)) {
+        if (preg_match_all($this->variableTagRegex, (string) $text, $data_matches)) {
             foreach ($data_matches[1] as $index => $var) {
                 if (($val = $this->getVariable($var, $data, '__lex_no_value__')) !== '__lex_no_value__') {
                     $text = str_replace($data_matches[0][$index], $val, $text);
@@ -324,7 +324,7 @@ class Merge
             }
             $condition = preg_replace($this->conditionalNotRegex, '$1!$2', $condition);
 
-            if (preg_match_all($this->conditionalExistsRegex, $condition, $existsMatches, PREG_SET_ORDER)) {
+            if (preg_match_all($this->conditionalExistsRegex, (string) $condition, $existsMatches, PREG_SET_ORDER)) {
                 foreach ($existsMatches as $m) {
                     $exists = 'true';
                     if ($this->getVariable($m[2], $data, '__doesnt_exist__') === '__doesnt_exist__') {
@@ -334,15 +334,15 @@ class Merge
                 }
             }
 
-            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', [$this, 'processConditionVar'], $condition);
+            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', $this->processConditionVar(...), (string) $condition);
 
             if ($callback) {
-                $condition = preg_replace('/\b(?!\{\s*)(' . $this->callbackNameRegex . ')(?!\s+.*?\s*\})\b/', '{$1}', $condition);
+                $condition = preg_replace('/\b(?!\{\s*)(' . $this->callbackNameRegex . ')(?!\s+.*?\s*\})\b/', '{$1}', (string) $condition);
                 $condition = $this->parseCallbackTags($condition, $data, $callback);
             }
 
             // Re-extract the strings that have now been possibly added.
-            if (preg_match_all('/(["\']).*?(?<!\\\\)\1/', $condition, $str_matches)) {
+            if (preg_match_all('/(["\']).*?(?<!\\\\)\1/', (string) $condition, $str_matches)) {
                 foreach ($str_matches[0] as $m) {
                     $condition = $this->createExtraction('__cond_str', $m, $m, $condition);
                 }
@@ -351,7 +351,7 @@ class Merge
 
             // Re-process for variables, we trick processConditionVar so that it will return null
             $this->inCondition = false;
-            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', [$this, 'processConditionVar'], $condition);
+            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', $this->processConditionVar(...), (string) $condition);
             $this->inCondition = true;
 
             // Re-inject any strings we extracted
@@ -370,11 +370,11 @@ class Merge
 
             $conditional .= ': ?>';
 
-            $text = preg_replace('/' . preg_quote($match[0], '/') . '/m', addcslashes($conditional, '\\$'), $text, 1);
+            $text = preg_replace('/' . preg_quote($match[0], '/') . '/m', addcslashes($conditional, '\\$'), (string) $text, 1);
         }
 
-        $text = preg_replace($this->conditionalElseRegex, '<?php else: ?>', $text);
-        $text = preg_replace($this->conditionalEndRegex, '<?php endif; ?>', $text);
+        $text = preg_replace($this->conditionalElseRegex, '<?php else: ?>', (string) $text);
+        $text = preg_replace($this->conditionalEndRegex, '<?php endif; ?>', (string) $text);
 
         $text = $this->parsePhp($text);
         $this->inCondition = false;
@@ -415,11 +415,11 @@ class Merge
                     $has_children = false;
                 }
 
-                $replacement = $this->parse($orig_text, $child, $callback, $this->allowPhp);
+                $replacement = $this->parse($orig_text, $child, $callback);
 
                 // If this is the first loop we'll use $tag as reference, if not
                 // we'll use the previous tag ($next_tag)
-                $current_tag = ($next_tag !== null) ? $next_tag : $tag;
+                $current_tag = $next_tag ?? $tag;
 
                 // If this is the last loop set the next tag to be empty
                 // otherwise hash it.
@@ -440,7 +440,7 @@ class Merge
     /**
      * Gets or sets the Scope Glue
      */
-    protected function scopeGlue(string $glue = null): string
+    protected function scopeGlue(?string $glue = null): string
     {
         if ($glue !== null) {
             $this->regexSetup = false;
@@ -469,7 +469,7 @@ class Merge
     {
         if (isset(self::$extractions['noparse'])) {
             foreach (self::$extractions['noparse'] as $hash => $replacement) {
-                if (strpos($text, "noparse_{$hash}") !== false) {
+                if (str_contains($text, "noparse_{$hash}")) {
                     $text = str_replace("noparse_{$hash}", $replacement, $text);
                 }
             }
@@ -486,9 +486,9 @@ class Merge
     {
         $var = is_array($match) ? $match[0] : $match;
         if (
-            in_array(strtolower($var), ['true', 'false', 'null', 'or', 'and']) ||
-            strpos($var, '__cond_str') === 0 ||
-            strpos($var, '__cond_exists') === 0 ||
+            in_array(strtolower((string) $var), ['true', 'false', 'null', 'or', 'and']) ||
+            str_starts_with((string) $var, '__cond_str') ||
+            str_starts_with((string) $var, '__cond_exists') ||
             is_numeric($var)
         ) {
             return $var;
@@ -617,12 +617,12 @@ class Merge
     /**
      * Injects all of the extractions.
      */
-    protected function injectExtractions(string $text, string $type = null): string
+    protected function injectExtractions(string $text, ?string $type = null): string
     {
         if ($type === null) {
             foreach (self::$extractions as $type => $extractions) {
                 foreach ($extractions as $hash => $replacement) {
-                    if (strpos($text, "{$type}_{$hash}") !== false) {
+                    if (str_contains($text, "{$type}_{$hash}")) {
                         $text = str_replace("{$type}_{$hash}", $replacement, $text);
                         unset(self::$extractions[$type][$hash]);
                     }
@@ -634,7 +634,7 @@ class Merge
             }
 
             foreach (self::$extractions[$type] as $hash => $replacement) {
-                if (strpos($text, "{$type}_{$hash}") !== false) {
+                if (str_contains($text, "{$type}_{$hash}")) {
                     $text = str_replace("{$type}_{$hash}", $replacement, $text);
                     unset(self::$extractions[$type][$hash]);
                 }
@@ -651,7 +651,7 @@ class Merge
      */
     protected function getVariable(string $key, array $data, $default = null)
     {
-        if (strpos($key, $this->scopeGlue) === false) {
+        if (!str_contains($key, $this->scopeGlue)) {
             $parts = explode('.', $key);
         } else {
             $parts = explode($this->scopeGlue, $key);
@@ -710,12 +710,12 @@ class Merge
 
         $parameters = preg_replace_callback(
             '/(.*?\s*=\s*(?!__))(' . $this->variableRegex . ')/is',
-            [$this, 'processParamVar'],
+            $this->processParamVar(...),
             $parameters
         );
 
         if ($callback) {
-            $parameters = preg_replace('/(.*?\s*=\s*(?!\{\s*)(?!__))(' . $this->callbackNameRegex . ')(?!\s*\})\b/', '$1{$2}', $parameters);
+            $parameters = preg_replace('/(.*?\s*=\s*(?!\{\s*)(?!__))(' . $this->callbackNameRegex . ')(?!\s*\})\b/', '$1{$2}', (string) $parameters);
             $parameters = $this->parseCallbackTags($parameters, $data, $callback);
         }
 

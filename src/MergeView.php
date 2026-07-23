@@ -29,21 +29,24 @@ class MergeView extends ViewAbstract implements ViewInterface
     protected function __construct(array $config, ?DataInterface $data = null)
     {
         $this->merge = new Merge($config);
-        $this->pluginHandler = [$this->merge, 'pluginCallBackHandler'];
+        $this->pluginHandler = $this->merge->pluginCallBackHandler(...);
 
         parent::__construct($config, $data);
     }
 
+    #[\Override]
     public function render(string $view = '', array $data = [], array $options = []): string
     {
         return $this->merge->parse(file_get_contents($view), $this->data($data), $this->pluginHandler);
     }
 
+    #[\Override]
     public function renderString(string $string, array $data = [], array $options = []): string
     {
         return $this->merge->parse($string, $this->data($data), $this->pluginHandler);
     }
 
+    #[\Override]
     public function change(string $name, mixed $value): self
     {
         $this->merge->change($name, $value);
