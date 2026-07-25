@@ -62,10 +62,20 @@ class Merge
 
     protected array $pluginSearchPaths = [];
 
+    /**
+     * When false (the default) a tag with no matching plugin renders as an empty
+     * string, which is how the upstream Lex parser degrades and how every other
+     * unresolved construct in this parser behaves. Set true to have a missing
+     * plugin throw instead - useful while developing templates, since plugin
+     * calls and plain variables are shape-identical and a typo is otherwise silent.
+     */
+    protected bool $strictPlugins = false;
+
     public function __construct(array $config)
     {
         $this->allowPhp = $config['allow php'] ?? false;
         $this->pluginSearchPaths = $config['plugin search paths'] ?? [];
+        $this->strictPlugins = $config['strict plugins'] ?? false;
     }
 
     public function change(string $name, mixed $value): self
@@ -99,7 +109,12 @@ class Merge
 
         // did it load?
         if (!function_exists($functionName)) {
-            throw new MergeException('Could not location ' . $functionName . ' plugin.');
+            if ($this->strictPlugins) {
+                throw new MergeException('Could not locate ' . $functionName . ' plugin.');
+            }
+
+            // no such plugin - this was an unresolved tag, not a plugin call
+            return '';
         }
 
         // lex_ucfirst_plugin($name, $parameters, $content)

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use orange\framework\Data;
 use orange\mergeview\Merge;
 use orange\mergeview\MergeView;
+use orange\mergeview\exceptions\Merge as MergeException;
 
 final class MailMergeTest extends unitTestHelper
 {
@@ -71,25 +72,47 @@ final class MailMergeTest extends unitTestHelper
     }
 
     /**
-     * The full syntax tour, parsed without a plugin callback - unresolved tags
-     * render empty, which is what the stored fixture captures. Going through
-     * MergeView here would instead send every unresolved tag to the plugin
-     * handler and fail on the first one.
+     * The full syntax tour, parsed the way MergeView does it - with the plugin
+     * handler wired in. parseCallbackTags() hands it every leftover tag, not
+     * just namespaced ones, so in the default lenient mode anything unresolved
+     * (here {{who}} and the {{assignees}} loop on the second project, which
+     * has contributors instead) comes back empty.
      */
     public function testParseTheFullSyntaxTour(): void
     {
-        $this->markTestSkipped(
-            'The stored fixture expects an unresolved tag - {{who}}, and a loop over a ' .
-            'missing key - to render empty, which needs a plugin callback that tolerates ' .
-            'a missing plugin. pluginCallBackHandler() currently throws instead, so no ' .
-            'call style reproduces the fixture. Pending a decision on which is correct.'
-        );
-
         $merge = new Merge(['allow php' => false, 'plugin search paths' => []]);
 
         $template = file_get_contents(__DIR__ . '/support/mergeViews/basic.merge');
         $match = file_get_contents(__DIR__ . '/support/mergeMatch.merge');
 
-        $this->assertEquals($match, $merge->parse($template, $this->sampleData));
+        $this->assertEquals($match, $merge->parse($template, $this->sampleData, $merge->pluginCallBackHandler(...)));
+    }
+
+    /**
+     * Same template, same missing plugin - but strict mode makes it an error
+     * instead of an empty string.
+     */
+    public function testStrictPluginsThrowsOnMissingPlugin(): void
+    {
+        $merge = new Merge(['allow php' => false, 'plugin search paths' => [], 'strict plugins' => true]);
+
+        $template = file_get_contents(__DIR__ . '/support/mergeViews/basic.merge');
+
+        $this->expectException(MergeException::class);
+
+        $merge->parse($template, $this->sampleData, $merge->pluginCallBackHandler(...));
+    }
+
+    /**
+     * Lenient mode only covers the no-such-plugin case - a plugin that exists
+     * is still called, and its return value used.
+     */
+    public function testResolvedPluginStillRuns(): void
+    {
+        $merge = new Merge(['allow php' => false, 'plugin search paths' => [__DIR__ . '/support/plugins']]);
+
+        $parsed = $merge->parse('{{ shout name="world" }}', [], $merge->pluginCallBackHandler(...));
+
+        $this->assertEquals('SHOUT: world', $parsed);
     }
 }
