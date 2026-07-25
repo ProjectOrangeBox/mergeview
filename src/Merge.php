@@ -484,11 +484,31 @@ class Merge
      */
     protected function processConditionVar(array $match): string
     {
-        $var = is_array($match) ? $match[0] : $match;
+        return $this->conditionVarToLiteral((string) $match[0]);
+    }
+
+    /**
+     * This is used as a callback for the conditional parser.  It takes a variable
+     * and returns the value of it, properly formatted.
+     */
+    protected function processParamVar(array $match): string
+    {
+        return $match[1] . $this->conditionVarToLiteral((string) $match[2]);
+    }
+
+    /**
+     * Resolve a single variable name from a condition or a parameter list to its
+     * literal value.
+     *
+     * Both callbacks above funnel through here - they differ only in which
+     * capture group holds the variable.
+     */
+    protected function conditionVarToLiteral(string $var): string
+    {
         if (
-            in_array(strtolower((string) $var), ['true', 'false', 'null', 'or', 'and']) ||
-            str_starts_with((string) $var, '__cond_str') ||
-            str_starts_with((string) $var, '__cond_exists') ||
+            in_array(strtolower($var), ['true', 'false', 'null', 'or', 'and']) ||
+            str_starts_with($var, '__cond_str') ||
+            str_starts_with($var, '__cond_exists') ||
             is_numeric($var)
         ) {
             return $var;
@@ -504,18 +524,12 @@ class Merge
     }
 
     /**
-     * This is used as a callback for the conditional parser.  It takes a variable
-     * and returns the value of it, properly formatted.
-     */
-    protected function processParamVar(array $match): string
-    {
-        return $match[1] . $this->processConditionVar($match[2]);
-    }
-
-    /**
      * Takes a value and returns the literal value for it for use in a tag.
+     *
+     * Resolved variables and plugin return values are whatever the data held,
+     * hence mixed - the branches below are what narrows it down.
      */
-    protected function valueToLiteral(string $value): string
+    protected function valueToLiteral(mixed $value): string
     {
         if (is_object($value) && is_callable([$value, '__toString'])) {
             return var_export((string) $value, true);

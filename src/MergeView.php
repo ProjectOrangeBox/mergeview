@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace orange\mergeview;
 
+use Closure;
 use orange\framework\abstract\ViewAbstract;
+use orange\mergeview\exceptions\ViewNotFound;
 use orange\framework\interfaces\DataInterface;
 use orange\framework\interfaces\ViewInterface;
 
@@ -24,7 +26,8 @@ use orange\framework\interfaces\ViewInterface;
 class MergeView extends ViewAbstract implements ViewInterface
 {
     protected Merge $merge;
-    protected array $pluginHandler;
+    // a first class callable to Merge::pluginCallBackHandler(), not an array
+    protected Closure $pluginHandler;
 
     protected function __construct(array $config, ?DataInterface $data = null)
     {
@@ -37,7 +40,15 @@ class MergeView extends ViewAbstract implements ViewInterface
     #[\Override]
     public function render(string $view = '', array $data = [], array $options = []): string
     {
-        return $this->merge->parse(file_get_contents($view), $this->data($data), $this->pluginHandler);
+        // resolve the view name against the search paths - handing the raw name
+        // to file_get_contents() would ignore every path added via addPath()
+        $found = $this->search->findFirst($view);
+
+        if ($found === '') {
+            throw new ViewNotFound($view);
+        }
+
+        return $this->merge->parse((string) file_get_contents($found), $this->data($data), $this->pluginHandler);
     }
 
     #[\Override]
