@@ -115,4 +115,80 @@ final class MailMergeTest extends unitTestHelper
 
         $this->assertEquals('SHOUT: world', $parsed);
     }
+
+    /* change() */
+
+    /**
+     * change() takes a config key, not the name of the validator that key maps
+     * to - the guard used to search $changeable's values, so the one call the
+     * class supports was the one call it rejected.
+     */
+    public function testChangeAcceptsAKnownConfigKey(): void
+    {
+        $merge = new Merge(['allow php' => false]);
+
+        $this->assertInstanceOf(Merge::class, $merge->change('allow php', true));
+    }
+
+    public function testChangeRejectsAnUnknownName(): void
+    {
+        $merge = new Merge(['allow php' => false]);
+
+        $this->expectException(MergeException::class);
+
+        $merge->change('allow html', true);
+    }
+
+    /**
+     * 'is_bool' is a *value* in $changeable, never a key - accepting it would
+     * mean the guard is still looking at the wrong half of the array.
+     */
+    public function testChangeRejectsTheValidatorName(): void
+    {
+        $merge = new Merge(['allow php' => false]);
+
+        $this->expectException(MergeException::class);
+
+        $merge->change('is_bool', true);
+    }
+
+    public function testChangeRejectsAValueThatFailsItsValidator(): void
+    {
+        $merge = new Merge(['allow php' => false]);
+
+        $this->expectException(MergeException::class);
+
+        $merge->change('allow php', 'yes please');
+    }
+
+    /**
+     * The property actually driving behaviour is $allowPhp; a spaced key has to
+     * be camelCased on the way in or the assignment lands on a brand new
+     * property named 'allow php' that nothing reads.
+     */
+    public function testChangeWritesTheCamelCasedProperty(): void
+    {
+        $merge = new Merge(['allow php' => false]);
+
+        $this->assertFalse($this->getPrivatePublic('allowPhp', $merge));
+
+        $merge->change('allow php', true);
+
+        $this->assertTrue($this->getPrivatePublic('allowPhp', $merge));
+    }
+
+    /**
+     * End to end: with php disallowed the tags are escaped, and change() has to
+     * be able to switch that off after construction.
+     */
+    public function testChangeTakesEffectOnParse(): void
+    {
+        $merge = new Merge(['allow php' => false]);
+
+        $this->assertEquals('&lt;? echo 1; ?&gt;', $merge->parse('<? echo 1; ?>'));
+
+        $merge->change('allow php', true);
+
+        $this->assertEquals('<? echo 1; ?>', $merge->parse('<? echo 1; ?>'));
+    }
 }

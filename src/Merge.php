@@ -80,20 +80,28 @@ class Merge
 
     public function change(string $name, mixed $value): self
     {
-        if (!in_array($name, $this->changeable)) {
+        // $changeable maps a config key to the validator its value must pass,
+        // so the name is a key here - in_array() would search the validators
+        if (!array_key_exists($name, $this->changeable)) {
             throw new MergeException($name);
         }
 
-        $function = str_replace(' ', '', lcfirst(ucwords($this->changeable[$name])));
+        $function = $this->changeable[$name];
 
         if (!$function($value)) {
             throw new MergeException($value);
         }
 
-        $this->$name = $value;
+        // config keys are spaced ('allow php'), the properties they set are
+        // camelCase ($allowPhp) - assigning $name directly would create a new
+        // property literally named 'allow php' that nothing ever reads
+        $property = str_replace(' ', '', lcfirst(ucwords($name)));
+
+        $this->$property = $value;
 
         return $this;
     }
+
     public function pluginCallBackHandler($name, $parameters, $content): string
     {
         $functionName = 'lex_' . $name . '_plugin';
