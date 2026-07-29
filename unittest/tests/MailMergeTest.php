@@ -16,18 +16,14 @@ final class MailMergeTest extends unitTestHelper
     protected function setUp(): void
     {
         $config = [
-            'view paths' => [],
-            'view aliases' => [],
             'temp directory' => sys_get_temp_dir(),
             'debug' => false,
             'extension' => '.merge',
         ];
 
-        // render()/addPath() live on the view, and both it and Data have
-        // protected constructors - newInstance() is the test-facing factory
+        // both the view and Data have protected constructors - newInstance() is
+        // the test-facing factory
         $this->instance = MergeView::newInstance($config, Data::newInstance([]));
-
-        $this->instance->search()->addDirectory(__DIR__ . '/support/mergeViews');
 
         $this->sampleData = array(
             'user'      => [
@@ -63,7 +59,7 @@ final class MailMergeTest extends unitTestHelper
     // Tests
     public function testRender(): void
     {
-        $this->assertEquals('<h1>Hello World!</h1>', $this->instance->render('test', ['who' => 'World']));
+        $this->assertEquals('<h1>Hello World!</h1>', $this->instance->render(__DIR__ . '/support/mergeViews/test.merge', ['who' => 'World']));
     }
 
     public function testRenderString(): void

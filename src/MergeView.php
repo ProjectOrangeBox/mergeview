@@ -37,18 +37,18 @@ class MergeView extends ViewAbstract implements ViewInterface
         parent::__construct($config, $data);
     }
 
+    /**
+     * @param string $viewFile Absolute path to the template - resolving a name
+     *        to a path is ViewFinder's job, not a view engine's
+     */
     #[\Override]
-    public function render(string $view = '', array $data = [], array $options = []): string
+    public function render(string $viewFile = '', array $data = [], array $options = []): string
     {
-        // resolve the view name against the search paths - handing the raw name
-        // to file_get_contents() would ignore every path added via addPath()
-        $found = $this->search->findFirst($view);
-
-        if ($found === '') {
-            throw new ViewNotFound($view);
+        if (!is_file($viewFile)) {
+            throw new ViewNotFound($viewFile);
         }
 
-        return $this->merge->parse((string) file_get_contents($found), $this->data($data), $this->pluginHandler);
+        return $this->merge->parse((string) file_get_contents($viewFile), $this->data($data), $this->pluginHandler);
     }
 
     #[\Override]
