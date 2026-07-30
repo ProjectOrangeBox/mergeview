@@ -22,6 +22,7 @@ use orange\mergeview\exceptions\Merge as MergeException;
 class Merge
 {
     protected bool $regexSetup = false;
+    /** @var non-empty-string */
     protected string $scopeGlue = '.';
     protected string $tagRegex = '';
     protected bool $cumulativeNoparse = false;
@@ -41,13 +42,17 @@ class Merge
     protected string $conditionalRegex = '';
     protected string $conditionalElseRegex = '';
     protected string $conditionalEndRegex = '';
+    /** @var array<string, mixed> */
     protected array $conditionalData = [];
 
+    /** @var array<string, array<string, string>> group => placeholder => extracted text */
     protected static $extractions = [
         'noparse' => [],
     ];
 
+    /** @var array<string, mixed>|object|null */
     protected static $localdata = null;
+    /** @var array<string, mixed> */
     protected static array $callbackData = [];
 
     protected string $recursiveRegex;
@@ -56,10 +61,12 @@ class Merge
     protected string $callbackNameRegex;
     protected string $callbackBlockRegex;
 
+    /** @var array<string, callable-string> property name => the is_* function that validates it */
     protected array $changeable = [
         'allow php' => 'is_bool',
     ];
 
+    /** @var list<string> */
     protected array $pluginSearchPaths = [];
 
     /**
@@ -71,6 +78,9 @@ class Merge
      */
     protected bool $strictPlugins = false;
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public function __construct(array $config)
     {
         $this->allowPhp = $config['allow php'] ?? false;
@@ -102,6 +112,11 @@ class Merge
         return $this;
     }
 
+    /**
+     * @param string $name
+     * @param array<string, mixed> $parameters
+     * @param string $content
+     */
     public function pluginCallBackHandler($name, $parameters, $content): string
     {
         $functionName = 'lex_' . $name . '_plugin';
@@ -132,6 +147,9 @@ class Merge
     /**
      * The main Lex parser method.  Essentially acts as dispatcher to
      * all of the helper parser methods.
+     *
+     * @param array<string, mixed> $data
+     * @param callable|false $callback
      */
     public function parse(string $text, array $data = [], $callback = false): string
     {
@@ -144,7 +162,8 @@ class Merge
         } else {
             // Let's merge the current data array with the local scope variables
             // So you can call local variables from within blocks.
-            $data = array_merge(self::$localdata, $data);
+            // $localdata may hold an object when parse() was first handed one
+            $data = array_merge($this->toArray(self::$localdata), $data);
 
             // Since this is not the first time parse() is called, it's most definitely a callback,
             // let's store the current callback data with the the local data
@@ -189,12 +208,16 @@ class Merge
     {
         $this->setupRegex();
 
-        return preg_replace('/\{\{#.*?#\}\}/s', '', $text);
+        // preg_replace() returns null if the pattern fails to compile
+        return preg_replace('/\{\{#.*?#\}\}/s', '', $text) ?? $text;
     }
 
     /**
      * Recursivly parses all of the variables in the given text and
      * returns the parsed text.
+     *
+     * @param array<string, mixed> $data
+     * @param callable|false|null $callback
      */
     protected function parseVariables(string $text, array $data, $callback = null): string
     {
@@ -225,7 +248,7 @@ class Merge
                             $looped_text .= $str;
                         }
                     }
-                    $text = preg_replace('/' . preg_quote($match[0][0], '/') . '/m', addcslashes($looped_text, '\\$'), (string) $text, 1);
+                    $text = preg_replace('/' . preg_quote($match[0][0], '/') . '/m', addcslashes($looped_text, '\\$'), (string) $text, 1) ?? '';
                 } else { // It's a callback block.
                     // Let's extract it so it doesn't conflict
                     // with the local scope variables in the next step.
@@ -251,6 +274,9 @@ class Merge
 
     /**
      * Parses all Callback tags, and sends them through the given $callback.
+     *
+     * @param array<string, mixed> $data
+     * @param callable|false|null $callback
      */
     protected function parseCallbackTags(string $text, array $data, $callback): string
     {
@@ -301,9 +327,15 @@ class Merge
                 // Is there a nested block under this one existing with the same name?
                 $nested_regex = '/\{\{\s*(' . preg_quote($name, '/') . ')(\s.*?)\}\}(.*?)\{\{\s*\/\1\s*\}\}/ms';
                 if (preg_match($nested_regex, $content . $match[0][0], $nested_matches)) {
-                    $nested_content = preg_replace('/\{\{\s*\/' . preg_quote($name, '/') . '\s*\}\}/m', '', $nested_matches[0]);
+                    $nested_content = preg_replace('/\{\{\s*\/' . preg_quote($name, '/') . '\s*\}\}/m', '', $nested_matches[0]) ?? '';
                     $content = $this->createExtraction('nested_looped_tags', $nested_content, $nested_content, $content);
                 }
+            }
+
+            // $callback is false/null when nothing was supplied, and
+            // call_user_func_array() takes a callable
+            if (!is_callable($callback)) {
+                throw new MergeException('a callback tag was found but no callback was supplied');
             }
 
             $replacement = call_user_func_array($callback, [$name, $parameters, $content]);
@@ -312,7 +344,7 @@ class Merge
             if ($inCondition) {
                 $replacement = $this->valueToLiteral($replacement);
             }
-            $text = preg_replace('/' . preg_quote($tag, '/') . '/m', addcslashes((string)$replacement, '\\$'), $text, 1);
+            $text = preg_replace('/' . preg_quote($tag, '/') . '/m', addcslashes((string)$replacement, '\\$'), $text, 1) ?? '';
             $text = $this->injectExtractions($text, 'nested_looped_tags');
         }
 
@@ -321,6 +353,9 @@ class Merge
 
     /**
      * Parses all conditionals, then executes the conditionals.
+     *
+     * @param array<string, mixed> $data
+     * @param callable|false|null $callback
      */
     protected function parseConditionals(string $text, array $data, $callback): string
     {
@@ -345,7 +380,7 @@ class Merge
                     $condition = $this->createExtraction('__cond_str', $m, $m, $condition);
                 }
             }
-            $condition = preg_replace($this->conditionalNotRegex, '$1!$2', $condition);
+            $condition = preg_replace($this->conditionalNotRegex, '$1!$2', $condition) ?? '';
 
             if (preg_match_all($this->conditionalExistsRegex, (string) $condition, $existsMatches, PREG_SET_ORDER)) {
                 foreach ($existsMatches as $m) {
@@ -357,10 +392,10 @@ class Merge
                 }
             }
 
-            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', $this->processConditionVar(...), (string) $condition);
+            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', $this->processConditionVar(...), (string) $condition) ?? '';
 
             if ($callback) {
-                $condition = preg_replace('/\b(?!\{\s*)(' . $this->callbackNameRegex . ')(?!\s+.*?\s*\})\b/', '{$1}', (string) $condition);
+                $condition = preg_replace('/\b(?!\{\s*)(' . $this->callbackNameRegex . ')(?!\s+.*?\s*\})\b/', '{$1}', (string) $condition) ?? '';
                 $condition = $this->parseCallbackTags($condition, $data, $callback);
             }
 
@@ -374,7 +409,7 @@ class Merge
 
             // Re-process for variables, we trick processConditionVar so that it will return null
             $this->inCondition = false;
-            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', $this->processConditionVar(...), (string) $condition);
+            $condition = preg_replace_callback('/\b(' . $this->variableRegex . ')\b/', $this->processConditionVar(...), (string) $condition) ?? '';
             $this->inCondition = true;
 
             // Re-inject any strings we extracted
@@ -393,11 +428,11 @@ class Merge
 
             $conditional .= ': ?>';
 
-            $text = preg_replace('/' . preg_quote($match[0], '/') . '/m', addcslashes($conditional, '\\$'), (string) $text, 1);
+            $text = preg_replace('/' . preg_quote($match[0], '/') . '/m', addcslashes($conditional, '\\$'), (string) $text, 1) ?? '';
         }
 
-        $text = preg_replace($this->conditionalElseRegex, '<?php else: ?>', (string) $text);
-        $text = preg_replace($this->conditionalEndRegex, '<?php endif; ?>', (string) $text);
+        $text = preg_replace($this->conditionalElseRegex, '<?php else: ?>', (string) $text) ?? '';
+        $text = preg_replace($this->conditionalEndRegex, '<?php endif; ?>', (string) $text) ?? '';
 
         $text = $this->parsePhp($text);
         $this->inCondition = false;
@@ -407,6 +442,8 @@ class Merge
 
     /**
      * Goes recursively through a callback tag with a passed child array.
+     *
+     * @param callable|false|null $callback
      */
     protected function parseRecursives(?string $text, string $orig_text, $callback): string
     {
@@ -438,7 +475,7 @@ class Merge
                     $has_children = false;
                 }
 
-                $replacement = $this->parse($orig_text, $child, $callback);
+                $replacement = $this->parse($orig_text, $child, $callback ?? false);
 
                 // If this is the first loop we'll use $tag as reference, if not
                 // we'll use the previous tag ($next_tag)
@@ -448,7 +485,7 @@ class Merge
                 // otherwise hash it.
                 $next_tag = ($count == $child_count) ? '' : sha1($tag . $replacement);
 
-                $text = str_replace($current_tag, $replacement . $next_tag, $text);
+                $text = str_replace($current_tag, $replacement . $next_tag, (string) $text);
 
                 if ($has_children) {
                     $text = $this->parseRecursives($text, $orig_text, $callback);
@@ -465,6 +502,12 @@ class Merge
      */
     protected function scopeGlue(?string $glue = null): string
     {
+        if ($glue === '') {
+            // getVariable() explodes on this, and explode() rejects an empty
+            // separator with a ValueError that says nothing about the glue
+            throw new MergeException('the scope glue cannot be empty');
+        }
+
         if ($glue !== null) {
             $this->regexSetup = false;
             $this->scopeGlue = $glue;
@@ -504,6 +547,8 @@ class Merge
     /**
      * This is used as a callback for the conditional parser.  It takes a variable
      * and returns the value of it, properly formatted.
+     *
+     * @param array<int, string> $match
      */
     protected function processConditionVar(array $match): string
     {
@@ -513,6 +558,8 @@ class Merge
     /**
      * This is used as a callback for the conditional parser.  It takes a variable
      * and returns the value of it, properly formatted.
+     *
+     * @param array<int, string> $match
      */
     protected function processParamVar(array $match): string
     {
@@ -617,6 +664,9 @@ class Merge
 
     /**
      * Extracts the looped tags so that we can parse conditionals then re-inject.
+     *
+     * @param array<string, mixed> $data
+     * @param callable|false|null $callback
      */
     protected function extractLoopedTags(string $text, array $data = [], $callback = null): string
     {
@@ -685,6 +735,10 @@ class Merge
      * Takes a dot-notated key and finds the value for it in the given
      * array or object.
      * ** Multi return
+     *
+     * @param array<string, mixed> $data
+     * @param mixed $default
+     * @return mixed
      */
     protected function getVariable(string $key, array $data, $default = null)
     {
@@ -727,12 +781,19 @@ class Merge
             throw new MergeException($output . str_replace(['?>', '<?php '], '', $text));
         }
 
-        return ob_get_clean();
+        // ob_get_clean() returns false when no buffer is active
+        $rendered = ob_get_clean();
+
+        return $rendered === false ? '' : $rendered;
     }
 
 
     /**
      * Parses a parameter string into an array
+     *
+     * @param array<string, mixed> $data
+     * @param callable|false|null $callback
+     * @return array<string, mixed>
      */
     protected function parseParameters(string $parameters, array $data, $callback): array
     {
@@ -749,10 +810,10 @@ class Merge
             '/(.*?\s*=\s*(?!__))(' . $this->variableRegex . ')/is',
             $this->processParamVar(...),
             $parameters
-        );
+        ) ?? '';
 
         if ($callback) {
-            $parameters = preg_replace('/(.*?\s*=\s*(?!\{\s*)(?!__))(' . $this->callbackNameRegex . ')(?!\s*\})\b/', '$1{$2}', (string) $parameters);
+            $parameters = preg_replace('/(.*?\s*=\s*(?!\{\s*)(?!__))(' . $this->callbackNameRegex . ')(?!\s*\})\b/', '$1{$2}', (string) $parameters) ?? '';
             $parameters = $this->parseCallbackTags($parameters, $data, $callback);
         }
 
@@ -774,6 +835,9 @@ class Merge
 
     /**
      * Convert objects to arrays
+     *
+     * @param mixed $data
+     * @return array<string, mixed>
      */
     public function toArray($data = []): array
     {
